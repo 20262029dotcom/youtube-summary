@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부동산 유튜브 요약</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1d2129; --sub:#6b7280; --line:#e5e7eb; --key:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; line-height:1.55; }
+  header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); padding:12px 16px 10px; }
+  h1 { font-size:18px; margin:0 0 2px; }
+  #updated { font-size:12px; color:var(--sub); }
+  #search { width:100%; margin-top:10px; padding:9px 12px; border:1px solid var(--line); border-radius:10px; font-size:15px; }
+  #chips { display:flex; gap:6px; overflow-x:auto; margin-top:8px; padding-bottom:2px; }
+  .chip { flex:none; border:1px solid var(--line); background:var(--card); border-radius:999px; padding:4px 12px; font-size:13px; cursor:pointer; }
+  .chip.on { background:var(--key); border-color:var(--key); color:#fff; }
+  main { max-width:760px; margin:0 auto; padding:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; }
+  .top { display:flex; gap:12px; padding:12px; text-decoration:none; color:inherit; }
+  .top img { width:128px; height:72px; object-fit:cover; border-radius:8px; flex:none; background:#ddd; }
+  .meta { font-size:12px; color:var(--sub); }
+  .title { font-weight:600; font-size:15px; margin-top:2px; }
+  .body { padding:0 14px 14px; }
+  .headline { background:#eef4ff; border-radius:8px; padding:8px 10px; font-weight:600; font-size:14px; }
+  ul { margin:8px 0 0; padding-left:20px; font-size:14px; }
+  li { margin:3px 0; }
+  .tags { margin-top:8px; display:flex; flex-wrap:wrap; gap:4px; }
+  .tag { font-size:12px; background:#f1f5f9; border-radius:6px; padding:2px 8px; }
+  .caution { margin-top:8px; font-size:13px; color:#92400e; background:#fffbeb; border-radius:8px; padding:6px 10px; }
+  .src { font-size:11px; color:var(--sub); margin-top:6px; }
+  .tools { display:flex; gap:6px; margin-top:8px; font-size:13px; }
+  .tools button { border:1px solid var(--line); background:var(--card); border-radius:8px; padding:4px 10px; font-size:13px; cursor:pointer; }
+  .tools button.on { background:#111827; color:#fff; border-color:#111827; }
+  .t { display:inline-block; min-width:44px; color:var(--key); text-decoration:none; font-variant-numeric:tabular-nums; }
+  .read { float:right; border:1px solid var(--line); background:#fff; border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer; }
+  .card.done { opacity:.55; }
+  .empty { text-align:center; color:var(--sub); padding:60px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>부동산 유튜브 요약</h1>
+  <div id="updated"></div>
+  <input id="search" type="search" placeholder="지역·단지·낱말 검색">
+  <div id="chips"></div>
+  <div class="tools">
+    <button id="sort">최신순</button>
+    <button id="unread">안 읽은 것만</button>
+  </div>
+</header>
+<main id="list"></main>
+<script>
+let items = [], channel = "전체", q = "", oldest = false, onlyUnread = false;
+const readSet = new Set(JSON.parse(localStorage.getItem("readVideos") || "[]"));
+const saveRead = () => localStorage.setItem("readVideos", JSON.stringify([...readSet]));
+const sec = t => String(t || "").split(":").reduce((a, b) => a * 60 + (+b || 0), 0);
+const pointHtml = (it, p) => typeof p === "string" ? `<li>${esc(p)}</li>` :
+  `<li><a class="t" href="${esc(it.url)}&t=${sec(p.time)}s" target="_blank" rel="noopener">${esc(p.time)}</a> ${esc(p.text)}</li>`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const when = s => { const d = new Date(s); return `${d.getMonth()+1}월 ${d.getDate()}일`; };
+
+function render() {
+  const list = items.filter(it => (channel === "전체" || it.channel === channel) &&
+    (!q || JSON.stringify([it.title, it.headline, it.points, it.regions]).includes(q)) &&
+    (!onlyUnread || !readSet.has(it.id)));
+  list.sort((a, b) => (oldest ? 1 : -1) * String(a.published).localeCompare(String(b.published)));
+  document.getElementById("list").innerHTML = list.length ? list.map(it => `
+    <article class="card${readSet.has(it.id) ? " done" : ""}">
+      <a class="top" href="${esc(it.url)}" target="_blank" rel="noopener">
+        <img src="${esc(it.thumb)}" alt="" loading="lazy">
+        <div><div class="meta">${esc(it.channel)} · ${when(it.published)}${it.minutes ? ` · ${it.minutes}분` : ""}</div>
+             <div class="title">${esc(it.title)}</div></div>
+      </a>
+      <div class="body">
+        <button class="read" data-id="${esc(it.id)}">${readSet.has(it.id) ? "읽음 ✓" : "읽음 표시"}</button>
+        <div class="headline">${esc(it.headline)}</div>
+        <ul>${(it.points || []).map(p => pointHtml(it, p)).join("")}</ul>
+        ${(it.regions || []).length ? `<div class="tags">${it.regions.map(r => `<span class="tag">${esc(r)}</span>`).join("")}</div>` : ""}
+        ${it.caution ? `<div class="caution">확인 필요: ${esc(it.caution)}</div>` : ""}
+        <div class="src">${it.source === "설명란" ? "영상 설명란 기준 요약" : "영상 내용 기준 요약"} · AI 요약이라 틀릴 수 있습니다</div>
+      </div>
+    </article>`).join("") : `<div class="empty">아직 요약한 영상이 없습니다.</div>`;
+  document.querySelectorAll(".read").forEach(b => b.onclick = () => {
+    const id = b.dataset.id; readSet.has(id) ? readSet.delete(id) : readSet.add(id); saveRead(); render();
+  });
+}
+
+function chips() {
+  const names = ["전체", ...new Set(items.map(it => it.channel))];
+  const box = document.getElementById("chips");
+  box.innerHTML = names.map(n => `<button class="chip${n === channel ? " on" : ""}">${esc(n)}</button>`).join("");
+  box.querySelectorAll(".chip").forEach((b, i) => b.onclick = () => { channel = names[i]; chips(); render(); });
+}
+
+document.getElementById("sort").onclick = e => { oldest = !oldest; e.target.textContent = oldest ? "오래된순" : "최신순"; render(); };
+document.getElementById("unread").onclick = e => { onlyUnread = !onlyUnread; e.target.classList.toggle("on", onlyUnread); render(); };
+document.getElementById("search").oninput = e => { q = e.target.value.trim(); render(); };
+
+fetch("videos.json?" + Date.now()).then(r => r.json()).then(d => {
+  items = d.items || [];
+  if (d.updated) document.getElementById("updated").textContent = `마지막 갱신 ${d.updated.replace("T", " ").slice(0, 16)} · 요약 ${items.length}개` + (d.queue ? ` · 남은 영상 ${d.queue}개` : "");
+  chips(); render();
+}).catch(() => { document.getElementById("list").innerHTML = `<div class="empty">데이터를 불러오지 못했습니다.</div>`; });
+</script>
+</body>
+</html>
