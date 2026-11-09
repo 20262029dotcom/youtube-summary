@@ -35,6 +35,7 @@ jobs:
           MAX_PER_RUN: ${{ vars.MAX_PER_RUN }}
           MAX_MINUTES: ${{ vars.MAX_MINUTES }}
           BACKLOG_ORDER: ${{ vars.BACKLOG_ORDER }}
+          PRIORITY_KEYWORD: ${{ vars.PRIORITY_KEYWORD }}
         run: python scripts/collect.py
 
       - name: 결과 저장

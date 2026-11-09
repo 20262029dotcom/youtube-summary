@@ -7,12 +7,14 @@ GitHub Actions에서 하루 1번 실행하고, PC에서 직접 실행해도 된�
 
     python scripts/collect.py            # 새 영상 + 대기열 요약
     python scripts/collect.py --list     # 채널 영상 목록만 다시 받기 (요약 안 함)
+    python scripts/collect.py --keyword 반포   # 제목에 '반포'가 든 영상만 먼저 요약
 
 환경 변수 (PC에서는 gemini_key.txt 파일로도 키를 읽는다)
     GEMINI_API_KEY : Gemini API 키 (필수)
     GEMINI_MODEL   : 사용할 모델 (기본 gemini-3.5-flash)
     MAX_PER_RUN    : 실행 1회에 요약할 영상 수 (기본 20)
     MAX_MINUTES    : 실행 1회에 요약할 영상 길이 합계(분) (기본 420)
+    PRIORITY_KEYWORD : 제목에 이 낱말이 든 영상을 먼저 요약 (선택)
 """
 
 import json
@@ -303,6 +305,7 @@ def get_key():
 
 def main():
     only_list = "--list" in sys.argv
+    keyword = sys.argv[sys.argv.index("--keyword") + 1] if "--keyword" in sys.argv else ""
     channels = [c for c in load_json(CHANNELS, []) if c.get("url")]
     data = load_json(OUT, {"items": []})
     seen = load_json(SEEN, {})
@@ -372,6 +375,14 @@ def main():
     order = os.environ.get("BACKLOG_ORDER", "newest")
     queue.sort(key=lambda v: v["published"] or "", reverse=(order != "oldest"))
     todo = sorted(fresh, key=lambda v: v["published"], reverse=True) + queue
+    # 우선 키워드(환경 변수 PRIORITY_KEYWORD): 제목에 키워드가 든 영상을 맨 앞으로 보낸다 (나머지는 그 뒤에 그대로)
+    prio = os.environ.get("PRIORITY_KEYWORD", "").strip()
+    if prio and not keyword:
+        todo = [v for v in todo if prio in v["title"]] + [v for v in todo if prio not in v["title"]]
+    # 키워드 우선 요약: 제목에 키워드가 든 영상만 요약한다 (python scripts/collect.py --keyword 반포)
+    if keyword:
+        todo = [v for v in todo if keyword in v["title"]]
+        log(f"키워드 '{keyword}'가 제목에 든 영상 {len(todo)}개만 요약")
     log(f"새 영상 {len(fresh)}개, 대기열 {len(queue)}개")
 
     used_min, done = 0, 0
