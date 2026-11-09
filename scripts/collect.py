@@ -186,6 +186,9 @@ def list_videos(urls, name):
 
 
 # ── Gemini 요약 ─────────────────────────────────────
+# 요약 지침 버전. 지침을 바꾸면 올리고, 이전 버전 요약은 대기열에 다시 넣어 새 지침으로 요약한다.
+PROMPT_VERSION = 2
+
 SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -195,20 +198,40 @@ SCHEMA = {
             "type": "OBJECT",
             "properties": {"time": {"type": "STRING"}, "text": {"type": "STRING"}},
             "required": ["time", "text"]}},
+        "criteria": {"type": "ARRAY", "items": {"type": "STRING"}},
         "regions": {"type": "ARRAY", "items": {"type": "STRING"}},
-        "caution": {"type": "STRING"},
     },
-    "required": ["related", "headline", "points", "regions", "caution"],
+    "required": ["related", "headline", "points", "criteria", "regions"],
 }
 
-PROMPT = """다음 유튜브 영상을, 영상을 보지 않아도 내용을 알 수 있도록 한국어로 요약해 줘.
-- related: 부동산(매매·전월세·분양·청약·재건축·정책·금리와 집값 등)과 관련된 영상이면 true
-- headline: 영상의 결론을 한 문장으로
-- points: 영상 흐름 순서대로 핵심 내용 4~8개. 각 항목에 그 내용이 나오는 시각(time, "분:초" 형식, 예 "12:34")과
-  내용(text)을 적는다. 영상에서 말한 숫자·지역·단지명·근거는 그대로 살린다
-- regions: 영상에서 언급한 지역이나 단지 이름 (없으면 빈 배열)
-- caution: 유튜버의 개인 의견이나 전망이라 확인이 필요한 부분을 한 문장으로 (없으면 빈 문자열)
-영상에 없는 내용은 지어내지 않는다.
+# 요약 지침 (사용자 요청, 2026-11-09)
+# - 목적: 이 유튜버의 투자 시각을 배우는 것. 사실 정리가 아니라 유튜버의 주관적 의견이 중심이다.
+# - 유튜버 의견은 지나가듯 한 말까지 한마디도 놓치지 않고 자세히 적는다.
+# - 세대수·준공연도 같은 기본 사실은 적지 않는다. 의견의 근거로 쓰일 때만 짧게 덧붙인다.
+# - "개인 의견이니 확인이 필요하다" 같은 방어적인 문구는 넣지 않는다. 사용자는 이미 주관적 시각임을 안다.
+PROMPT = """다음 유튜브 영상을 요약해 줘. 이 요약의 목적은 이 유튜버의 부동산 투자 시각을 배우는 것이다.
+사실 정보가 아니라 유튜버가 어떻게 생각하는지가 가장 중요하다.
+
+작성 원칙
+- 유튜버의 주관적인 의견·평가·판단·감상·예측·추천·비추천을 한마디도 놓치지 말고 자세히 적는다.
+  특히 단지나 동네를 보면서 지나가듯 던지는 한마디(장점·단점, "나라면 ~", "여기는 ~가 아쉽다",
+  "이 가격이면 ~", "사람들이 ~를 모르는데" 같은 말)가 가장 중요하다. 짧게 스친 말도 따로 항목으로 살린다.
+- 유튜버가 왜 그렇게 생각하는지, 그 판단의 이유와 논리를 함께 적는다.
+- 세대수·준공연도·평형·주차대수 같은 기본 사실은 적지 않는다. 유튜버가 의견의 근거로 든 경우에만
+  그 의견 문장 안에 짧게 덧붙인다.
+- "개인 의견이다", "확인이 필요하다", "투자에 주의하라" 같은 방어적인 문구는 쓰지 않는다.
+- 유튜버의 말투와 표현을 살려 "~라고 본다", "~가 아쉽다고 함"처럼 유튜버의 생각으로 적는다.
+- 영상에서 하지 않은 말은 지어내지 않는다.
+
+항목
+- related: 부동산(매매·전월세·분양·청약·재건축·정책·금리와 집값, 동네·단지 탐방 등)과 관련된 영상이면 true
+- headline: 이 영상에서 유튜버가 말하려는 핵심 주장이나 시각을 한 문장으로
+- points: 유튜버의 의견을 영상 흐름 순서대로 빠짐없이. 개수 제한은 없다(보통 10~25개).
+  각 항목에 그 말이 나오는 시각(time, "분:초" 형식, 예 "12:34")과 내용(text)을 적는다.
+  어느 단지·동네에 대한 의견인지 문장 안에 밝힌다
+- criteria: 이 영상에서 드러난 유튜버의 판단 기준이나 투자 원칙 (예: "대장 아파트는 신축보다 대단지 군집성이 결정한다").
+  다른 영상에도 적용할 수 있는 일반적인 시각으로 2~6개
+- regions: 유튜버가 의견을 말한 지역이나 단지 이름 (없으면 빈 배열)
 
 제목: {title}
 채널: {channel}
@@ -223,8 +246,8 @@ def gemini_call(parts, key, use_video):
     cfg = {
         "responseMimeType": "application/json",
         "responseSchema": SCHEMA,
-        "temperature": 0.2,
-        "maxOutputTokens": 8192,
+        "temperature": 0.3,
+        "maxOutputTokens": 16384,
     }
     if use_video:
         cfg["mediaResolution"] = "MEDIA_RESOLUTION_LOW"  # 화면 토큰을 줄인다 (말 내용이 중심이라 충분)
@@ -335,6 +358,16 @@ def main():
     for v in fresh:   # 대기열에 길이 정보가 있으면 함께 쓴다
         if v["id"] in backlog["queue"]:
             v["minutes"] = backlog["queue"][v["id"]].get("minutes")
+    # 이전 지침으로 요약한 영상은 대기열에 다시 넣는다 (새 요약이 나올 때까지 이전 요약은 그대로 보인다)
+    redo = 0
+    for k, it in items.items():
+        if it.get("v", 1) < PROMPT_VERSION and k not in backlog["queue"]:
+            backlog["queue"][k] = {**{f: it.get(f) for f in ("id", "channel", "title", "url", "thumb",
+                                                            "published", "minutes")}, "_desc": ""}
+            seen.pop(k, None)
+            redo += 1
+    if redo:
+        log(f"이전 지침으로 요약한 영상 {redo}개를 다시 요약 대기열에 넣음")
     queue = [v for k, v in backlog["queue"].items() if k not in fresh_ids and k not in seen]
     order = os.environ.get("BACKLOG_ORDER", "newest")
     queue.sort(key=lambda v: v["published"] or "", reverse=(order != "oldest"))
@@ -362,9 +395,13 @@ def main():
         backlog["queue"].pop(v["id"], None)
         if not res.get("related"):
             log("  부동산과 관련 없는 영상이라 건너뜀")
+            if v["id"] in items:
+                items[v["id"]]["v"] = PROMPT_VERSION   # 이전 요약은 남기고 다시 대기열에 넣지 않는다
             continue
         it = {k: val for k, val in v.items() if not k.startswith("_")}
-        it.update({k: res.get(k) for k in ("headline", "points", "regions", "caution", "source")})
+        it.pop("caution", None)
+        it.update({k: res.get(k) for k in ("headline", "points", "criteria", "regions", "source")})
+        it["v"] = PROMPT_VERSION
         it["summarized"] = now.isoformat(timespec="minutes")
         items[v["id"]] = it
         # 중간에 멈춰도 결과가 남도록 영상마다 저장

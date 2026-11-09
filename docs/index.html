@@ -28,6 +28,9 @@
   li { margin:3px 0; }
   .tags { margin-top:8px; display:flex; flex-wrap:wrap; gap:4px; }
   .tag { font-size:12px; background:#f1f5f9; border-radius:6px; padding:2px 8px; }
+  .crit { margin-top:10px; background:#f0fdf4; border-radius:8px; padding:8px 10px; font-size:13px; }
+  .crit b { display:block; font-size:12px; color:#166534; margin-bottom:2px; }
+  .crit ul { margin:2px 0 0; }
   .caution { margin-top:8px; font-size:13px; color:#92400e; background:#fffbeb; border-radius:8px; padding:6px 10px; }
   .src { font-size:11px; color:var(--sub); margin-top:6px; }
   .tools { display:flex; gap:6px; margin-top:8px; font-size:13px; }
@@ -78,8 +81,8 @@ function render() {
         <div class="headline">${esc(it.headline)}</div>
         <ul>${(it.points || []).map(p => pointHtml(it, p)).join("")}</ul>
         ${(it.regions || []).length ? `<div class="tags">${it.regions.map(r => `<span class="tag">${esc(r)}</span>`).join("")}</div>` : ""}
-        ${it.caution ? `<div class="caution">확인 필요: ${esc(it.caution)}</div>` : ""}
-        <div class="src">${it.source === "설명란" ? "영상 설명란 기준 요약" : "영상 내용 기준 요약"} · AI 요약이라 틀릴 수 있습니다</div>
+        ${(it.criteria || []).length ? `<div class="crit"><b>이 유튜버의 판단 기준</b><ul>${it.criteria.map(c => `<li>${esc(c)}</li>`).join("")}</ul></div>` : ""}
+        <div class="src">${it.source === "설명란" ? "영상 설명란 기준 요약" : "영상 내용 기준 요약"}${(it.v || 1) < 2 ? " · 이전 방식 요약(유튜버 의견 중심으로 다시 요약 예정)" : ""}</div>
       </div>
     </article>`).join("") : `<div class="empty">아직 요약한 영상이 없습니다.</div>`;
   document.querySelectorAll(".read").forEach(b => b.onclick = () => {
